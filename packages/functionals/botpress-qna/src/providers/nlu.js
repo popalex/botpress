@@ -34,9 +34,10 @@ export default class Storage {
     this.ghost = bp.ghostManager
     this.projectDir = bp.projectLocation
     this.qnaDir = config.qnaDir
+    this.microsoftQnaMakerApiKey = config.microsoftQnaMakerApiKey
   }
 
-  async initializeGhost() {
+  async initialize() {
     mkdirp.sync(path.resolve(this.projectDir, this.qnaDir))
     await this.ghost.addRootFolder(this.qnaDir, { filesGlob: '**/*.json' })
   }
@@ -98,5 +99,21 @@ export default class Storage {
       }
     }
     await this.ghost.deleteFile(this.qnaDir, `${id}.json`)
+  }
+
+  async getAnswers(text) {
+    const extract = await this.bp.nlu.provider.extract({ text })
+    const intents = _.chain([extract.intent, ...extract.intents])
+      .uniqBy('name')
+      .filter(({ name }) => name.startsWith('__qna__'))
+      .orderBy(['confidence'], ['desc'])
+      .value()
+
+    return Promise.all(
+      intents.map(async ({ name, confidence }) => {
+        const { data: { questions, answer } } = await this.getQuestion(name.replace('__qna__', ''))
+        return { questions, answer, confidence, id: name, metadata: [] }
+      })
+    )
   }
 }
